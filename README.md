@@ -5,37 +5,78 @@ Visualize your GitHub contributions, PRs, and activity from the terminal.
 ## Install
 
 ```bash
+pip install ghstats
+```
+
+Or from source:
+
+```bash
+git clone https://github.com/yunaremaia/ghstats.git
+cd ghstats
 pip install -e .
 ```
+
+## Features
+
+- **User Stats**: Followers, repos, contributions, PRs
+- **Contribution Heatmap**: 4-week activity grid
+- **Repo Explorer**: Top repos by stars
+- **Activity Feed**: Recent PRs and issues
+- **Badge Generator**: Markdown badges for profile README
+- **JSON Output**: For automation and CI
 
 ## Usage
 
 ```bash
-# Show your stats
+# Your stats
 ghstats stats yunaremaia
 
-# Show top repos
+# Top repos
 ghstats repos yunaremaia --limit 10
 
-# Show recent activity
+# Recent activity (last 30 days)
 ghstats activity yunaremaia --days 30
 
-# Show repo stats
+# Repo stats
 ghstats repo yunaremaia/driftcheck
 
-# Generate markdown badges
+# Generate badges
 ghstats badge yunaremaia
 
 # JSON output
 ghstats stats yunaremaia --json-output
 ```
 
-## Why
+## Example Output
 
-Quick overview of GitHub activity without leaving the terminal. Useful for:
-- Profile README updates
-- Tracking contribution metrics
-- Monitoring PR merge rates
+```
+╭──────────────────── @yunaremaia ────────────────────╮
+│ yunaremaia                                           │
+│ Followers: 5 | Following: 10 | Repos: 12             │
+╰──────────────────────────────────────────────────────┯
+       Activity Summary        
+┏━━━━━━━━━━━━━━━━━━━━┳━━━━━━━┓
+┃ Metric             ┃ Value ┃
+┡━━━━━━━━━━━━━━━━━━━━╇━━━━━━━┩
+│ Total Contribs     │   903 │
+│ PRs Opened         │    25 │
+│ PRs Merged         │    18 │
+│ Issues Opened      │    12 │
+└────────────────────┴───────┘
+
+Recent Activity (last 4 weeks)
+🟩🟩🟩🟩🟩🟩🟩
+🟩🟩🟩🟩🟩🟩🟩
+🟩🟩🟩🟩🟩🟩🟩
+🟩🟩🟩🟩🟩🟩🟩
+```
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
 
 ## License
 

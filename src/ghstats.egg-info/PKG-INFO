@@ -1,0 +1,61 @@
+Metadata-Version: 2.4
+Name: ghstats
+Version: 0.1.0
+Summary: GitHub Stats Dashboard — visualize your contributions, PRs, and activity
+Author-email: Yunaremaia <yunare@gmail.com>
+License: MIT
+Keywords: github,stats,dashboard,contributions,cli
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Topic :: Utilities
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: click>=8.1
+Requires-Dist: rich>=13.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+
+# ghstats — GitHub Stats Dashboard
+
+Visualize your GitHub contributions, PRs, and activity from the terminal.
+
+## Install
+
+```bash
+pip install -e .
+```
+
+## Usage
+
+```bash
+# Show your stats
+ghstats stats yunaremaia
+
+# Show top repos
+ghstats repos yunaremaia --limit 10
+
+# Show recent activity
+ghstats activity yunaremaia --days 30
+
+# Show repo stats
+ghstats repo yunaremaia/driftcheck
+
+# Generate markdown badges
+ghstats badge yunaremaia
+
+# JSON output
+ghstats stats yunaremaia --json-output
+```
+
+## Why
+
+Quick overview of GitHub activity without leaving the terminal. Useful for:
+- Profile README updates
+- Tracking contribution metrics
+- Monitoring PR merge rates
+
+## License
+
+MIT

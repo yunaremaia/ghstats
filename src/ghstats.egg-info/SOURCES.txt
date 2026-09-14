@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+src/ghstats/__init__.py
+src/ghstats/cli.py
+src/ghstats/fetcher.py
+src/ghstats.egg-info/PKG-INFO
+src/ghstats.egg-info/SOURCES.txt
+src/ghstats.egg-info/dependency_links.txt
+src/ghstats.egg-info/entry_points.txt
+src/ghstats.egg-info/requires.txt
+src/ghstats.egg-info/top_level.txt
+tests/test_fetcher.py

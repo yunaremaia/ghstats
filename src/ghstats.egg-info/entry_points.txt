@@ -1,0 +1,2 @@
+[console_scripts]
+ghstats = ghstats.cli:cli
