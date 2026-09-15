@@ -31,6 +31,10 @@ pip install -e .
 # Your stats
 ghstats stats yunaremaia
 
+# Compare two or more users (up to five)
+ghstats compare yunaremaia octocat
+ghstats compare yunaremaia octocat --json-output
+
 # Top repos
 ghstats repos yunaremaia --limit 10
 

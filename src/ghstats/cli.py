@@ -17,6 +17,31 @@ from ghstats.fetcher import StatsFetcher, UserStats
 console = Console()
 
 
+def _comparison_metrics(stats: UserStats) -> dict[str, int]:
+    """Return the comparable numeric metrics for one user."""
+    return {
+        "Followers": stats.followers,
+        "Following": stats.following,
+        "Public Repos": stats.public_repos,
+        "Contributions": stats.contributions.total_contributions,
+        "PRs Opened": stats.pull_requests.total_opened,
+        "PRs Merged": stats.pull_requests.total_merged,
+        "Issues Opened": stats.issues.total_opened,
+    }
+
+
+def _comparison_rows(stats_list: list[UserStats]) -> list[tuple[str, list[int], list[str]]]:
+    """Build metric rows and the users tied for the highest value."""
+    rows: list[tuple[str, list[int], list[str]]] = []
+    metrics = [_comparison_metrics(stats) for stats in stats_list]
+    for metric_name in metrics[0]:
+        values = [metric[metric_name] for metric in metrics]
+        highest = max(values)
+        winners = [stats.login for stats, value in zip(stats_list, values) if value == highest]
+        rows.append((metric_name, values, winners))
+    return rows
+
+
 def _format_number(n: int) -> str:
     """Format number with k/M suffix."""
     if n >= 1_000_000:
@@ -107,6 +132,61 @@ def stats(username, json_out):
                 else:
                     days_str += "⬜"
             console.print(days_str)
+
+
+@cli.command()
+@click.argument("usernames", nargs=-1, required=True)
+@click.option("--json-output", "json_out", is_flag=True, help="Output as JSON")
+def compare(usernames, json_out):
+    """Compare GitHub statistics for two to five users."""
+    if not 2 <= len(usernames) <= 5:
+        raise click.UsageError("compare requires between 2 and 5 usernames")
+
+    stats_list = []
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Fetching comparison stats...", total=len(usernames))
+        for username in usernames:
+            stats_list.append(StatsFetcher(username).fetch_user_stats())
+            progress.advance(task)
+
+    rows = _comparison_rows(stats_list)
+    if json_out:
+        payload = {
+            "users": [stats.login for stats in stats_list],
+            "metrics": [
+                {
+                    "name": metric_name,
+                    "values": {
+                        stats.login: value for stats, value in zip(stats_list, values)
+                    },
+                    "winners": winners,
+                }
+                for metric_name, values, winners in rows
+            ],
+        }
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    table = Table(title="GitHub User Comparison")
+    table.add_column("Metric", style="cyan")
+    for username in usernames:
+        table.add_column(username, justify="right", no_wrap=True)
+    table.add_column("Winner", style="green")
+
+    for metric_name, values, winners in rows:
+        highest = max(values)
+        rendered_values = [
+            f"[bold green]{value}[/bold green]" if value == highest else str(value)
+            for value in values
+        ]
+        winner = ", ".join(winners) if len(winners) > 1 else winners[0]
+        table.add_row(metric_name, *rendered_values, winner)
+
+    console.print(table)
 
 
 @cli.command()
