@@ -57,6 +57,11 @@ class UserStats:
     total_commits: int = 0
 
 
+class GHRuntimeError(RuntimeError):
+    """Raised when gh CLI is missing or unauthenticated."""
+    pass
+
+
 class StatsFetcher:
     """Fetch GitHub stats using gh CLI."""
 
@@ -64,15 +69,38 @@ class StatsFetcher:
         self.username = username
 
     def _run_gh(self, args: list[str]) -> dict | list:
-        """Run gh CLI and return JSON output."""
+        """Run gh CLI and return JSON output.
+
+        Raises:
+            GHRuntimeError: If gh is missing, unauthenticated, or the query fails.
+        """
         cmd = ["gh", "api"] + args
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             if result.returncode != 0:
-                return {} if "--json" in args else []
-            return json.loads(result.stdout)
-        except (subprocess.TimeoutExpired, json.JSONDecodeError):
-            return {} if "--json" in args else []
+                stderr = result.stderr.strip()
+                if "authentication" in stderr.lower() or "401" in stderr:
+                    raise GHRuntimeError(
+                        "GitHub CLI not authenticated. Run `gh auth login` or set GH_TOKEN env var.\n"
+                        f"Original error: {stderr}"
+                    )
+                if "not found" in stderr.lower():
+                    raise GHRuntimeError(
+                        f"Resource not found.\nOriginal error: {stderr}"
+                    )
+                raise GHRuntimeError(
+                    f"gh api failed with exit code {result.returncode}.\n"
+                    f"stderr: {stderr}"
+                )
+            try:
+                return json.loads(result.stdout)
+            except json.JSONDecodeError as e:
+                raise GHRuntimeError(f"Invalid JSON from gh: {e}\nstdout: {result.stdout[:500]}")
+        except subprocess.TimeoutExpired:
+            raise GHRuntimeError(f"gh command timed out after 30s")
+        except FileNotFoundError:
+            raise GHRuntimeError(
+                "gh CLI not found. Install from https://cli.github.com/")
 
     def fetch_user_stats(self) -> UserStats:
         """Fetch comprehensive user stats."""
