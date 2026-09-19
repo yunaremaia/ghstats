@@ -35,6 +35,11 @@ class PullRequestStats:
 
 
 @dataclass
+class GHRuntimeError(RuntimeError):
+    """Custom exception for GitHub CLI runtime errors."""
+    pass
+
+
 class IssueStats:
     """Issue statistics."""
     total_opened: int = 0
@@ -69,10 +74,16 @@ class StatsFetcher:
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
             if result.returncode != 0:
-                return {} if "--json" in args else []
+                raise GHRuntimeError(
+                    f"gh CLI failed with exit code {result.returncode}: {result.stderr or result.stdout}"
+                )
             return json.loads(result.stdout)
-        except (subprocess.TimeoutExpired, json.JSONDecodeError):
-            return {} if "--json" in args else []
+        except subprocess.TimeoutExpired:
+            raise GHRuntimeError("gh CLI command timed out after 30 seconds")
+        except json.JSONDecodeError as e:
+            raise GHRuntimeError(f"Failed to parse gh CLI JSON output: {e.msg}")
+        except FileNotFoundError as e:
+            raise GHRuntimeError(f"gh CLI not found: {e}")
 
     def fetch_user_stats(self) -> UserStats:
         """Fetch comprehensive user stats."""
