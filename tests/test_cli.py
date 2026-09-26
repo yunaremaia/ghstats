@@ -2,7 +2,7 @@
 
 from click.testing import CliRunner
 
-from ghstats.cli import cli
+from ghstats.cli import _comparison_rows, cli
 from ghstats.fetcher import UserStats
 
 
@@ -58,3 +58,58 @@ def test_compare_requires_two_users():
 
     assert result.exit_code != 0
     assert "between 2 and 5 usernames" in result.output
+
+
+def test_comparison_rows_empty_list():
+    assert _comparison_rows([]) == []
+
+
+def test_comparison_rows_missing_and_mismatched_fields():
+    user_a = UserStats(login="alice", followers=10)
+    user_a.pull_requests = None  # type: ignore[assignment]
+    user_a.contributions = None  # type: ignore[assignment]
+    user_a.issues = None  # type: ignore[assignment]
+
+    user_b = _user("bob", followers=5, contributions=20)
+
+    rows = _comparison_rows([user_a, user_b])
+    row_dict = {name: (vals, winners) for name, vals, winners in rows}
+
+    assert "Followers" in row_dict
+    assert row_dict["Followers"] == ([10, 5], ["alice"])
+
+    assert "Contributions" in row_dict
+    assert row_dict["Contributions"] == ([0, 20], ["bob"])
+
+    assert "PRs Opened" in row_dict
+    assert row_dict["PRs Opened"] == ([0, 1], ["bob"])
+
+
+def test_comparison_rows_both_missing_or_default():
+    user_a = UserStats(login="alice")
+    user_b = UserStats(login="bob")
+    rows = _comparison_rows([user_a, user_b])
+    for _metric_name, values, winners in rows:
+        assert values == [0, 0]
+        assert winners == ["alice", "bob"]
+
+
+def test_compare_cli_with_partial_stats(monkeypatch):
+    user_a = UserStats(login="alice", followers=15)
+    user_a.pull_requests = None  # type: ignore[assignment]
+    user_a.contributions = None  # type: ignore[assignment]
+    user_a.issues = None  # type: ignore[assignment]
+
+    user_b = _user("bob", followers=10, contributions=50)
+
+    users = {"alice": user_a, "bob": user_b}
+    monkeypatch.setattr(
+        "ghstats.cli.StatsFetcher.fetch_user_stats",
+        lambda fetcher: users[fetcher.username],
+    )
+
+    result = CliRunner().invoke(cli, ["compare", "alice", "bob"])
+    assert result.exit_code == 0
+    assert "GitHub User Comparison" in result.output
+    assert "alice" in result.output
+    assert "bob" in result.output

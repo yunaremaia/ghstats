@@ -18,26 +18,42 @@ console = Console()
 
 
 def _comparison_metrics(stats: UserStats) -> dict[str, int]:
-    """Return the comparable numeric metrics for one user."""
+    """Return the comparable numeric metrics for one user, handling missing fields gracefully."""
+    contributions = getattr(stats, "contributions", None)
+    pull_requests = getattr(stats, "pull_requests", None)
+    issues = getattr(stats, "issues", None)
+
     return {
-        "Followers": stats.followers,
-        "Following": stats.following,
-        "Public Repos": stats.public_repos,
-        "Contributions": stats.contributions.total_contributions,
-        "PRs Opened": stats.pull_requests.total_opened,
-        "PRs Merged": stats.pull_requests.total_merged,
-        "Issues Opened": stats.issues.total_opened,
+        "Followers": getattr(stats, "followers", 0) if getattr(stats, "followers", None) is not None else 0,
+        "Following": getattr(stats, "following", 0) if getattr(stats, "following", None) is not None else 0,
+        "Public Repos": getattr(stats, "public_repos", 0) if getattr(stats, "public_repos", None) is not None else 0,
+        "Contributions": getattr(contributions, "total_contributions", 0) if contributions is not None and getattr(contributions, "total_contributions", None) is not None else 0,
+        "PRs Opened": getattr(pull_requests, "total_opened", 0) if pull_requests is not None and getattr(pull_requests, "total_opened", None) is not None else 0,
+        "PRs Merged": getattr(pull_requests, "total_merged", 0) if pull_requests is not None and getattr(pull_requests, "total_merged", None) is not None else 0,
+        "Issues Opened": getattr(issues, "total_opened", 0) if issues is not None and getattr(issues, "total_opened", None) is not None else 0,
     }
 
 
 def _comparison_rows(stats_list: list[UserStats]) -> list[tuple[str, list[int], list[str]]]:
     """Build metric rows and the users tied for the highest value."""
+    if not stats_list:
+        return []
+
     rows: list[tuple[str, list[int], list[str]]] = []
     metrics = [_comparison_metrics(stats) for stats in stats_list]
-    for metric_name in metrics[0]:
-        values = [metric[metric_name] for metric in metrics]
-        highest = max(values)
-        winners = [stats.login for stats, value in zip(stats_list, values) if value == highest]
+
+    seen: set[str] = set()
+    metric_names: list[str] = []
+    for m in metrics:
+        for k in m:
+            if k not in seen:
+                seen.add(k)
+                metric_names.append(k)
+
+    for metric_name in metric_names:
+        values = [metric.get(metric_name, 0) for metric in metrics]
+        highest = max(values) if values else 0
+        winners = [getattr(stats, "login", "") for stats, value in zip(stats_list, values) if value == highest]
         rows.append((metric_name, values, winners))
     return rows
 
@@ -183,7 +199,7 @@ def compare(usernames, json_out):
             f"[bold green]{value}[/bold green]" if value == highest else str(value)
             for value in values
         ]
-        winner = ", ".join(winners) if len(winners) > 1 else winners[0]
+        winner = ", ".join(winners) if len(winners) > 1 else (winners[0] if winners else "N/A")
         table.add_row(metric_name, *rendered_values, winner)
 
     console.print(table)
