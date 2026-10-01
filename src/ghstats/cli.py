@@ -60,11 +60,14 @@ def _comparison_rows(stats_list: list[UserStats]) -> list[tuple[str, list[int], 
 
 def _format_number(n: int) -> str:
     """Format number with k/M suffix."""
-    if n >= 1_000_000:
-        return f"{n / 1_000_000:.1f}M"
-    elif n >= 1_000:
-        return f"{n / 1_000:.1f}k"
-    return str(n)
+    if n < 1_000:
+        return str(n)
+    thousands = n / 1_000
+    # Values just under a million (e.g. 999,999) would round up to "1000.0k",
+    # so show them in millions instead.
+    if round(thousands, 1) < 1_000:
+        return f"{thousands:.1f}k"
+    return f"{n / 1_000_000:.1f}M"
 
 
 def _format_date(date_str: str) -> str:
