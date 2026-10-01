@@ -2,15 +2,13 @@
 from __future__ import annotations
 
 import json
-import sys
 from datetime import datetime
 
 import click
 from rich.console import Console
-from rich.table import Table
 from rich.panel import Panel
-from rich.columns import Columns
 from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.table import Table
 
 from ghstats.fetcher import StatsFetcher, UserStats
 
@@ -85,7 +83,6 @@ def _format_date(date_str: str) -> str:
 @click.version_option(package_name="ghstats")
 def cli():
     """ghstats — GitHub Stats Dashboard."""
-    pass
 
 
 @cli.command()

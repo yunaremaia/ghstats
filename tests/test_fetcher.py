@@ -1,10 +1,12 @@
 """Tests for ghstats fetcher."""
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from ghstats.fetcher import (
-    StatsFetcher, UserStats, ContributionCalendar,
-    PullRequestStats, IssueStats, ContributionDay
+    ContributionDay,
+    StatsFetcher,
+    UserStats,
 )
 
 

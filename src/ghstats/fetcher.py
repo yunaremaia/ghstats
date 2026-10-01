@@ -4,8 +4,7 @@ from __future__ import annotations
 import json
 import subprocess
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
-from typing import Any, Iterator
+from datetime import datetime, timedelta, timezone
 
 
 @dataclass
@@ -59,7 +58,6 @@ class UserStats:
 
 class GHRuntimeError(RuntimeError):
     """Raised when gh CLI is missing or unauthenticated."""
-    pass
 
 
 class StatsFetcher:
@@ -76,7 +74,9 @@ class StatsFetcher:
         """
         cmd = ["gh", "api"] + args
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            # Return codes are inspected explicitly below to map gh's stderr onto
+            # GHRuntimeError, so check=False preserves that handling.
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False)
             if result.returncode != 0:
                 stderr = result.stderr.strip()
                 if "authentication" in stderr.lower() or "401" in stderr:
@@ -97,7 +97,7 @@ class StatsFetcher:
             except json.JSONDecodeError as e:
                 raise GHRuntimeError(f"Invalid JSON from gh: {e}\nstdout: {result.stdout[:500]}")
         except subprocess.TimeoutExpired:
-            raise GHRuntimeError(f"gh command timed out after 30s")
+            raise GHRuntimeError("gh command timed out after 30s")
         except FileNotFoundError:
             raise GHRuntimeError(
                 "gh CLI not found. Install from https://cli.github.com/")
@@ -184,7 +184,6 @@ class StatsFetcher:
     def fetch_user_repos(self, limit: int = 30) -> list[dict]:
         """Fetch user's public repos."""
         repos = []
-        page = 1
         while len(repos) < limit:
             per_page = min(100, limit - len(repos))
             data = self._run_gh([
@@ -212,7 +211,9 @@ class StatsFetcher:
     def fetch_contribution_history(self, days: int = 30) -> list[dict]:
         """Fetch recent contribution activity."""
         activities = []
-        since = (datetime.now() - timedelta(days=days)).isoformat() + "Z"
+        # The "Z" suffix below declares the timestamp as UTC, so compute it in UTC.
+        # datetime.now() returns naive local time, which would mislabel the cutoff.
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat() + "Z"
 
         # Fetch recent PRs
         prs = self._run_gh([

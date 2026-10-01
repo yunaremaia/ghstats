@@ -5,7 +5,6 @@ import pytest
 from ghstats.cli import _comparison_metrics, _format_date, _format_number
 from ghstats.fetcher import UserStats
 
-
 # --- _format_number ---
 
 
