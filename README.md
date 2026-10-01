@@ -11,7 +11,7 @@ Visualize your GitHub contributions, PRs, and activity from the terminal.
 ## Install
 
 ```bash
-pip install ghstats
+pip install git+https://github.com/yunaremaia/ghstats.git
 ```
 
 Or from source:
