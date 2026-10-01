@@ -1,5 +1,0 @@
-click>=8.1
-rich>=13.0
-
-[dev]
-pytest>=7.0
