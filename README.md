@@ -1,5 +1,11 @@
 # ghstats — GitHub Stats Dashboard
 
+![CI](https://github.com/yunaremaia/ghstats/actions/workflows/ci.yml/badge.svg)
+![Python](https://img.shields.io/badge/python-3.10-blue.svg)
+![License](https://img.shields.io/github/license/yunaremaia/ghstats)
+![Stars](https://img.shields.io/github/stars/yunaremaia/ghstats)
+
+
 Visualize your GitHub contributions, PRs, and activity from the terminal.
 
 ## Install
@@ -81,6 +87,19 @@ Recent Activity (last 4 weeks)
 pip install -e ".[dev]"
 pytest
 ```
+
+
+If this tool is useful to you, a star helps other people find it.
+
+## Related tools
+
+- **[oss-contribution-finder](https://github.com/yunaremaia/oss-contribution-finder)** — find OSS projects ready to contribute to
+- **[ci-test-gate](https://github.com/yunaremaia/ci-test-gate)** — block PRs until the required tests actually run
+- **[agent-workspace](https://github.com/yunaremaia/agent-workspace)** — isolated workspaces per AI agent session
+- **[gfi](https://github.com/yunaremaia/gfi)** — find well-scoped good first issues to start on
+
+Part of a family of focused, single-purpose developer tools — each one does one thing
+and does it well.
 
 ## License
 
