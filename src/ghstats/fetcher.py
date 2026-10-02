@@ -109,11 +109,10 @@ class StatsFetcher:
         # Basic user info
         user_data = self._run_gh(["users", self.username])
         if user_data:
-            stats.name = user_data.get("name", "")
-            stats.followers = user_data.get("followers", {}).get("totalCount", 0)
-            stats.following = user_data.get("following", {}).get("totalCount", 0)
-            stats.public_repos = user_data.get("repositories", {}).get("totalCount", 0)
-            stats.stars_received = user_data.get("repositories", {}).get("totalCount", 0)
+            stats.name = user_data.get("name") or ""
+            stats.followers = user_data.get("followers") or 0
+            stats.following = user_data.get("following") or 0
+            stats.public_repos = user_data.get("public_repos") or 0
 
         # Contribution calendar
         contrib_data = self._run_gh([
