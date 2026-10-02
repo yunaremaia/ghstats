@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Renamed the distribution to `ghstats-py`. The name `ghstats` on PyPI belongs to
+  a different author (kefir500/ghstats), so `pip install ghstats` would have
+  installed someone else's program. The `ghstats` command is unchanged.
+
 ### Fixed
 - Fix the crash in every command that called the API: REST endpoint paths are now
   passed to `gh api` as a single joined argument (`users/<login>`) instead of

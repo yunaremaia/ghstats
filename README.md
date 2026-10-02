@@ -10,9 +10,17 @@ Visualize your GitHub contributions, PRs, and activity from the terminal.
 
 ## Install
 
+This project is not published on PyPI yet, so install it straight from git:
+
 ```bash
 pip install git+https://github.com/yunaremaia/ghstats.git
 ```
+
+The short name `ghstats` is **not** an install target for this project: on PyPI
+that name belongs to a different author ([kefir500/ghstats](https://github.com/kefir500/ghstats),
+a release download counter). Installing it would silently get you a different
+program. When this project is published, the distribution name will be
+`ghstats-py` and the command stays `ghstats`.
 
 Or from source:
 
