@@ -34,7 +34,12 @@ import shlex
 from pathlib import Path
 
 import pytest
-import tomllib
+
+try:  # Python 3.11+ ships a TOML parser in the standard library.
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - depends on the interpreter
+    # This project supports Python 3.10, where `tomllib` does not exist yet.
+    import tomli as tomllib
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 README = REPO_ROOT / "README.md"
