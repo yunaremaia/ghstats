@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Renamed the distribution to `ghstats-py`. The name `ghstats` on PyPI belongs to
+  a different author (kefir500/ghstats), so `pip install ghstats` would have
+  installed someone else's program. The `ghstats` command is unchanged.
+
 ## [0.1.0] - 2026-09-09
 
 ### Added

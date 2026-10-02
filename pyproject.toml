@@ -3,7 +3,7 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ghstats"
+name = "ghstats-py"
 version = "0.1.0"
 description = "GitHub Stats Dashboard — visualize your contributions, PRs, and activity"
 readme = "README.md"
