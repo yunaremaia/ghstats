@@ -60,6 +60,25 @@ class GHRuntimeError(RuntimeError):
     """Raised when gh CLI is missing or unauthenticated."""
 
 
+# GitHub caps a REST page at 100 items; the repo walk below always asks for
+# whole pages and trims the result, and REST search rejects anything larger.
+_MAX_PER_PAGE = 100
+# Slack room on top of ceil(limit / 100) for users whose pages are mostly forks.
+_MAX_REPO_PAGES = 2
+
+
+def _repo_name_from_url(api_url: str) -> str:
+    """Turn a REST ``repository_url`` into an ``owner/name`` slug.
+
+    ``https://api.github.com/repos/owner/name`` -> ``owner/name``.
+    """
+    marker = "/repos/"
+    index = api_url.find(marker)
+    if index == -1:
+        return ""
+    return api_url[index + len(marker):].strip("/")
+
+
 class StatsFetcher:
     """Fetch GitHub stats using gh CLI."""
 
@@ -102,12 +121,54 @@ class StatsFetcher:
             raise GHRuntimeError(
                 "gh CLI not found. Install from https://cli.github.com/")
 
+    def _search_issues(
+        self,
+        query: str,
+        per_page: int = 1,
+        sort: str = "",
+        order: str = "",
+    ) -> dict:
+        """Run a REST search query and return the whole response envelope.
+
+        ``gh search issues`` is a separate subcommand with its own flags, so it
+        cannot be routed through :meth:`_run_gh`, which always prepends
+        ``gh api``. The REST endpoint ``search/issues`` is reachable via
+        ``gh api`` and returns ``total_count`` plus ``items``, which is what the
+        callers need. ``-X GET`` is required: without it ``gh api`` switches to
+        POST as soon as ``-f`` parameters are present.
+
+        Args:
+            query: Search query string, e.g. ``author:octocat type:pr``.
+            per_page: Page size, capped at the API maximum of 100.
+            sort: Optional sort field, e.g. ``updated``.
+            order: Optional sort direction, ``asc`` or ``desc``.
+
+        Returns:
+            The decoded JSON response; ``{}`` when the payload is not an object.
+
+        Raises:
+            GHRuntimeError: If the query fails.
+        """
+        per_page = max(1, min(per_page, _MAX_PER_PAGE))
+        args = [
+            "search/issues",
+            "-X", "GET",
+            "-f", f"q={query}",
+            "-f", f"per_page={per_page}",
+        ]
+        if sort:
+            args += ["-f", f"sort={sort}"]
+        if order:
+            args += ["-f", f"order={order}"]
+        result = self._run_gh(args)
+        return result if isinstance(result, dict) else {}
+
     def fetch_user_stats(self) -> UserStats:
         """Fetch comprehensive user stats."""
         stats = UserStats(login=self.username)
 
         # Basic user info
-        user_data = self._run_gh(["users", self.username])
+        user_data = self._run_gh([f"users/{self.username}"])
         if user_data:
             stats.name = user_data.get("name") or ""
             stats.followers = user_data.get("followers") or 0
@@ -133,39 +194,21 @@ class StatsFetcher:
                 stats.contributions.weeks.append(week_days)
 
         # PR stats
-        search_prs = self._run_gh([
-            "search",
-            "issues",
-            f"author:{self.username} type:pr",
-            "--limit", "1",
-        ])
-        if isinstance(search_prs, dict):
-            stats.pull_requests.total_opened = search_prs.get("total_count", 0)
+        search_prs = self._search_issues(f"author:{self.username} type:pr")
+        stats.pull_requests.total_opened = search_prs.get("total_count", 0)
 
-        merged_prs = self._run_gh([
-            "search",
-            "issues",
-            f"author:{self.username} type:pr is:merged",
-            "--limit", "1",
-        ])
-        if isinstance(merged_prs, dict):
-            stats.pull_requests.total_merged = merged_prs.get("total_count", 0)
+        merged_prs = self._search_issues(f"author:{self.username} type:pr is:merged")
+        stats.pull_requests.total_merged = merged_prs.get("total_count", 0)
 
         # Issue stats
-        opened_issues = self._run_gh([
-            "search",
-            "issues",
-            f"author:{self.username} type:issue",
-            "--limit", "1",
-        ])
-        if isinstance(opened_issues, dict):
-            stats.issues.total_opened = opened_issues.get("total_count", 0)
+        opened_issues = self._search_issues(f"author:{self.username} type:issue")
+        stats.issues.total_opened = opened_issues.get("total_count", 0)
 
         return stats
 
     def fetch_repo_stats(self, repo: str) -> dict:
         """Fetch stats for a specific repo."""
-        repo_data = self._run_gh(["repos", repo])
+        repo_data = self._run_gh([f"repos/{repo}"])
         if not repo_data:
             return {}
 
@@ -182,13 +225,18 @@ class StatsFetcher:
 
     def fetch_user_repos(self, limit: int = 30) -> list[dict]:
         """Fetch user's public repos."""
-        repos = []
-        while len(repos) < limit:
-            per_page = min(100, limit - len(repos))
+        repos: list[dict] = []
+        page = 1
+        # A user can own many more repos than `limit` while only a few are
+        # non-forks, so bound the number of pages instead of trusting the
+        # exit condition to stop an unbounded walk.
+        max_pages = max(1, -(-limit // _MAX_PER_PAGE) + _MAX_REPO_PAGES)
+        while len(repos) < limit and page <= max_pages:
+            per_page = min(_MAX_PER_PAGE, limit - len(repos))
+            # `gh api` rejects --per-page/--paginate; paging params belong in
+            # the endpoint query string.
             data = self._run_gh([
-                f"users/{self.username}/repos",
-                "--paginate",
-                f"--per-page={per_page}",
+                f"users/{self.username}/repos?per_page={per_page}&page={page}",
             ])
             if not data or not isinstance(data, list):
                 break
@@ -205,36 +253,36 @@ class StatsFetcher:
                     })
             if len(data) < per_page:
                 break
+            page += 1
         return repos[:limit]
 
     def fetch_contribution_history(self, days: int = 30) -> list[dict]:
         """Fetch recent contribution activity."""
-        activities = []
-        # The "Z" suffix below declares the timestamp as UTC, so compute it in UTC.
-        # datetime.now() returns naive local time, which would mislabel the cutoff.
-        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat() + "Z"
+        activities: list[dict] = []
+        # GitHub search only accepts a YYYY-MM-DD cutoff; a full ISO-8601
+        # timestamp is rejected as a malformed query. Compute it in UTC so the
+        # day boundary matches the `updated:` window we ask for.
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
 
         # Fetch recent PRs
-        prs = self._run_gh([
-            "search",
-            "issues",
+        results = self._search_issues(
             f"author:{self.username} type:pr updated:>={since}",
-            "--sort", "updated",
-            "--order", "desc",
-            "--limit", "30",
-            "--json", "number,title,repository,state,mergedAt,updatedAt,url",
-        ])
-        if isinstance(prs, list):
-            for pr in prs:
-                repo = pr.get("repository", {}).get("nameWithOwner", "")
-                activities.append({
-                    "type": "pr",
-                    "title": pr.get("title", ""),
-                    "repo": repo,
-                    "state": "merged" if pr.get("mergedAt") else pr.get("state", "").lower(),
-                    "date": pr.get("updatedAt", ""),
-                    "url": pr.get("url", ""),
-                })
+            per_page=30,
+            sort="updated",
+            order="desc",
+        )
+        items = results.get("items")
+        for pr in items if isinstance(items, list) else []:
+            repo = _repo_name_from_url(pr.get("repository_url", ""))
+            merged_at = (pr.get("pull_request") or {}).get("merged_at")
+            activities.append({
+                "type": "pr",
+                "title": pr.get("title", ""),
+                "repo": repo,
+                "state": "merged" if merged_at else pr.get("state", "").lower(),
+                "date": pr.get("updated_at", ""),
+                "url": pr.get("html_url", ""),
+            })
 
         # Sort by date
         activities.sort(key=lambda x: x.get("date", ""), reverse=True)
