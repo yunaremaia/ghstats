@@ -10,6 +10,7 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from ghstats import __version__
 from ghstats.fetcher import StatsFetcher, UserStats
 
 console = Console()
@@ -80,7 +81,7 @@ def _format_date(date_str: str) -> str:
 
 
 @click.group()
-@click.version_option(package_name="ghstats")
+@click.version_option(version=__version__, prog_name="ghstats")
 def cli():
     """ghstats — GitHub Stats Dashboard."""
 

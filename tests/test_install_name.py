@@ -311,23 +311,63 @@ class TestPackaging:
 
         setuptools `packages.find where = ["src"]` installs `ghstats/` into the
         wheel root, so `src/` is the directory that goes on sys.path.
+
+        The distribution rename moved the name `click.version_option` looks up
+        in the installed metadata. It used to be hardcoded as
+        `package_name="ghstats"`, which no longer exists once the distribution
+        is called `ghstats-py`: `--version` raised RuntimeError because the
+        import name then mapped to more than one installed distribution. The
+        version is now read from the package's own `__version__` instead, so
+        this entry point must keep resolving inside the packaged tree.
         """
         target = _PYPROJECT["project"]["scripts"][REPO_NAME]
         module_path, _, attr = target.partition(":")
 
-        import_root = REPO_ROOT / "src"
+        packaged_root = REPO_ROOT / _PYPROJECT["tool"]["setuptools"]["packages"]["find"]["where"][0]
         top_level = module_path.split(".")[0]
         assert top_level == "ghstats", (
             f"console script imports {top_level!r} but the package is `ghstats`"
         )
 
-        resolved = import_root / Path(*module_path.split(".")).with_suffix(".py")
+        resolved = packaged_root / Path(*module_path.split(".")).with_suffix(".py")
         assert resolved.exists(), f"console script module not in wheel: {module_path} ({resolved})"
 
         source = resolved.read_text(encoding="utf-8")
         assert re.search(rf"^def {re.escape(attr)}\b", source, re.MULTILINE), (
             f"{target} does not define {attr}() in {resolved.name}"
         )
+
+    def test_version_flag_does_not_depend_on_the_distribution_name(self):
+        """`--version` must not look up the old, colliding distribution name.
+
+        `click.version_option(package_name=...)` resolves through the *installed
+        distribution* metadata, so pinning it to the PyPI name couples the CLI to
+        a name this project deliberately does not own -- and one that now belongs
+        to another author. Under the renamed distribution the lookup raised
+        RuntimeError ('ghstats' maps to multiple installed distributions), which
+        killed `--version` entirely. Reading `__version__` off the package keeps
+        the flag working under any distribution name.
+        """
+        source = (REPO_ROOT / "src" / REPO_NAME / "cli.py").read_text(encoding="utf-8")
+        assert "package_name=" not in source, (
+            "cli.py must not pin click's version_option to a distribution name; "
+            "use version=__version__ so the CLI is independent of the PyPI name"
+        )
+        assert re.search(r"@click\.version_option\(", source), "the --version flag must remain"
+
+    def test_version_flag_reports_the_package_version(self):
+        """`--version` must print the package's own `__version__`.
+
+        Asserted against a literal so renaming the distribution or bumping the
+        version cannot make this pass by comparing a constant with itself.
+        """
+        from ghstats import __version__
+
+        assert __version__ == _PYPROJECT["project"]["version"], (
+            "src/ghstats/__init__.py and pyproject.toml must carry the same version, "
+            "otherwise `--version` and the release disagree"
+        )
+        assert re.match(r"^\d+\.\d+\.\d+", __version__), f"unparsable version: {__version__!r}"
 
 
 @pytest.mark.parametrize("line", ["pip install pre-commit", "pip install -e ."])
