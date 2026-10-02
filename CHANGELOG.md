@@ -5,7 +5,7 @@ All notable changes to ghstats will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-10-02
 
 ### Changed
 - Renamed the distribution to `ghstats-py`. The name `ghstats` on PyPI belongs to
@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   installed someone else's program. The `ghstats` command is unchanged.
 
 ### Fixed
+- `--version` no longer crashes after the distribution rename. It was declared
+  as `@click.version_option(package_name="ghstats")`, which resolves through the
+  *installed distribution* metadata; once the distribution became `ghstats-py`
+  that lookup raised `RuntimeError: 'ghstats' maps to multiple installed
+  distributions` and killed the flag on every invocation. It now reads
+  `__version__` from the package, so it is independent of the PyPI name. Two
+  regression guards were added.
 - Fix the crash in every command that called the API: REST endpoint paths are now
   passed to `gh api` as a single joined argument (`users/<login>`) instead of
   split segments (`users <login>`), which `gh` rejects with
