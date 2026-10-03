@@ -84,21 +84,20 @@ def top_level_imports() -> set[str]:
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     found.add(alias.name.split(".")[0])
-            elif isinstance(node, ast.ImportFrom):
-                # level > 0 is a relative import: first-party, not a dependency.
-                if node.level == 0 and node.module:
-                    found.add(node.module.split(".")[0])
+            elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+                # node.level > 0 is a relative import: first-party, not a dependency.
+                found.add(node.module.split(".")[0])
     return found
 
 
 def third_party_imports() -> set[str]:
     stdlib = set(sys.stdlib_module_names) | {"tomllib", "tomli_w"}
     first_party = {MODULE_NAME}
-    if PACKAGE_ROOT.is_dir():
-        first_party |= {
-            p.name for p in PACKAGE_ROOT.iterdir()
-            if p.is_dir() and (p / "__init__.py").exists()
-        }
+    subpackages = {
+        p.name for p in PACKAGE_ROOT.iterdir()
+        if p.is_dir() and (p / "__init__.py").exists()
+    } if PACKAGE_ROOT.is_dir() else set()
+    first_party = first_party | subpackages
     # canonical() is applied on BOTH sides of the cross-check: a try/except
     # tomllib/tomli fallback puts two spellings of one dependency in the source,
     # and only canonicalising the declared list would report the other as
@@ -263,6 +262,7 @@ def test_cli_version_agrees_with_the_module() -> None:
         pytest.skip("ghstats is not installed in this environment")
     result = subprocess.run(
         [binary, "--version"], capture_output=True, text=True, cwd=REPO_ROOT,
+        check=False,
     )
     output = (result.stdout + result.stderr).strip()
     if result.returncode != 0 and "No module named" in output:
