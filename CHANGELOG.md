@@ -5,6 +5,29 @@ All notable changes to ghstats will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Error chaining in `StatsFetcher._run_gh`: the three `GHRuntimeError` raises
+  inside `except` blocks now chain their cause (`raise ... from e`). Without the
+  chain, Python prints "During handling of the above exception, another
+  exception occurred" and buries the original diagnostic — for the timeout arm
+  that meant the hanging `gh` command was unrecoverable from the traceback, and
+  for the missing-binary arm `FileNotFoundError.filename` (which separates "gh
+  is not installed" from "gh is installed but not on PATH") was discarded in
+  favour of a fixed install hint.
+- `zip()` in the compare path now passes `strict=True`. `users` and `values` are
+  built from the same list today so the lengths always agree, but a bare `zip()`
+  truncates to the shorter sequence: any future refactor that made them diverge
+  would silently drop a user from the `--json-output` payload and from the
+  winner list while still exiting 0. It now raises instead. Two guards added —
+  an AST check that every `zip()` in `cli.py` is explicit, and a behavioural
+  test that feeds the command a deliberately mismatched row.
+
+### Changed
+- `ruff check .` now selects `B904` and `B905`, so both defects above are caught
+  by the CI lint job. The selection is green across `src/` and `tests/`.
+
 ## [0.2.0] - 2026-10-02
 
 ### Changed

@@ -34,3 +34,11 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff.lint]
+# Error-chaining and zip-length bugs. Both are invisible to `ruff check .`
+# defaults and silent in production: a `raise` inside `except` without `from`
+# flattens the diagnostic to "During handling of the above exception...", and a
+# bare `zip()` truncates to the shortest sequence, so a length mismatch drops
+# data with no error.
+extend-select = ["B904", "B905"]
