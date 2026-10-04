@@ -271,3 +271,39 @@ def test_cli_version_agrees_with_the_module() -> None:
         f"CLI reported {output!r} but the module reports "
         f"{ghstats.__version__!r}. Both must come from the installed metadata."
     )
+
+
+def test_version_falls_back_when_the_package_is_not_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The PackageNotFoundError branch must actually work, not merely exist.
+
+    Every other test in this file imports ``ghstats`` normally, so the
+    installed-metadata lookup always succeeds and the ``except
+    PackageNotFoundError`` arm is only ever reached from a subprocess. A
+    subprocess executes the branch but its statements stay invisible to the
+    coverage gate, which is exactly how an unexercised fallback survives
+    review looking tested.
+
+    Reloading **in-process** is the whole point: it is what makes the fallback
+    observable to coverage at all.
+    """
+    import importlib
+    from importlib import metadata
+
+    def not_installed(name: str) -> str:
+        raise metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(metadata, "version", not_installed)
+    monkeypatch.delitem(sys.modules, MODULE_NAME, raising=False)
+    reloaded = importlib.import_module(MODULE_NAME)
+    try:
+        assert reloaded.__version__ == "0.0.0.dev0", (
+            "expected the documented 0.0.0.dev0 fallback, got "
+            f"{reloaded.__version__!r}"
+        )
+    finally:
+        # Leave the interpreter as it was found, so a later test importing
+        # ghstats sees the installed version rather than the stubbed reload.
+        monkeypatch.delitem(sys.modules, MODULE_NAME, raising=False)
+        importlib.import_module(MODULE_NAME)
