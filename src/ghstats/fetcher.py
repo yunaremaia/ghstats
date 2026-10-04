@@ -114,12 +114,23 @@ class StatsFetcher:
             try:
                 return json.loads(result.stdout)
             except json.JSONDecodeError as e:
-                raise GHRuntimeError(f"Invalid JSON from gh: {e}\nstdout: {result.stdout[:500]}")
-        except subprocess.TimeoutExpired:
-            raise GHRuntimeError("gh command timed out after 30s")
-        except FileNotFoundError:
+                # `from e`: the decode position (line/column of stdout) is the
+                # actual diagnosis, and GHRuntimeError is a public error callers
+                # may inspect, so the cause must stay reachable as __cause__.
+                raise GHRuntimeError(
+                    f"Invalid JSON from gh: {e}\nstdout: {result.stdout[:500]}"
+                ) from e
+        except subprocess.TimeoutExpired as e:
+            # `from e`: the message cannot name the command, but TimeoutExpired
+            # carries .cmd and .timeout. Which gh call hung is the first thing a
+            # production traceback has to answer.
+            raise GHRuntimeError("gh command timed out after 30s") from e
+        except FileNotFoundError as e:
+            # `from e`: FileNotFoundError.filename distinguishes "gh is not
+            # installed" from "gh is installed but not on PATH / broken symlink",
+            # which the fixed message above cannot express.
             raise GHRuntimeError(
-                "gh CLI not found. Install from https://cli.github.com/")
+                "gh CLI not found. Install from https://cli.github.com/") from e
 
     def _search_issues(
         self,

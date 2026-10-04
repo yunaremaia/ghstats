@@ -1,9 +1,14 @@
 """Tests for ghstats CLI commands."""
 
+import ast
+from pathlib import Path
+
 from click.testing import CliRunner
 
 from ghstats.cli import _comparison_rows, cli
 from ghstats.fetcher import UserStats
+
+CLI_SOURCE = Path(__file__).resolve().parent.parent / "src" / "ghstats" / "cli.py"
 
 
 def _user(login: str, followers: int, contributions: int) -> UserStats:
@@ -113,3 +118,57 @@ def test_compare_cli_with_partial_stats(monkeypatch):
     assert "GitHub User Comparison" in result.output
     assert "alice" in result.output
     assert "bob" in result.output
+
+
+def test_zip_calls_pass_strict_explicitly():
+    """A bare zip() silently truncates to the shorter sequence.
+
+    Every zip() in the compare path pairs a user list with a value list of the
+    same length, so the truncation is invisible until a refactor makes them
+    diverge — and then it drops a user from the JSON payload with no error at
+    all. Requiring `strict=` turns that silent corruption into a loud failure.
+    """
+    tree = ast.parse(CLI_SOURCE.read_text(encoding="utf-8"), filename=str(CLI_SOURCE))
+    zips = [node for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+            and node.func.id == "zip"]
+
+    assert zips, "expected zip() calls in cli.py; this guard would be vacuous"
+    missing = [
+        f"cli.py:{node.lineno}" for node in zips
+        if not any(kw.arg == "strict" for kw in node.keywords)
+    ]
+    assert not missing, (
+        f"these zip() calls have no explicit strict=: {missing}. A bare zip() "
+        "truncates to the shortest sequence, so a length mismatch between users "
+        "and values would silently drop a user instead of raising."
+    )
+
+
+def test_compare_json_fails_loudly_when_value_lengths_diverge(monkeypatch):
+    """The behavioural counterpart of the strict= check.
+
+    `_comparison_rows` is stubbed to hand back a row with fewer values than
+    there are users — exactly the shape of the future refactor that would make
+    the two sequences disagree. zip(strict=True) must raise instead of quietly
+    emitting a payload that is missing a user.
+    """
+    users = {
+        "alice": _user("alice", followers=12, contributions=30),
+        "bob": _user("bob", followers=8, contributions=30),
+    }
+    monkeypatch.setattr(
+        "ghstats.cli.StatsFetcher.fetch_user_stats",
+        lambda fetcher: users[fetcher.username],
+    )
+    monkeypatch.setattr(
+        "ghstats.cli._comparison_rows",
+        lambda stats_list: [("Followers", [12], ["alice"])],
+    )
+
+    result = CliRunner().invoke(cli, ["compare", "alice", "bob", "--json-output"])
+
+    assert isinstance(result.exception, ValueError), (
+        "zip() truncated a 2-user comparison to 1 value and the command still "
+        f"exited 0: {result.output!r}"
+    )

@@ -52,7 +52,11 @@ def _comparison_rows(stats_list: list[UserStats]) -> list[tuple[str, list[int], 
     for metric_name in metric_names:
         values = [metric.get(metric_name, 0) for metric in metrics]
         highest = max(values) if values else 0
-        winners = [getattr(stats, "login", "") for stats, value in zip(stats_list, values) if value == highest]
+        winners = [
+            getattr(stats, "login", "")
+            for stats, value in zip(stats_list, values, strict=True)
+            if value == highest
+        ]
         rows.append((metric_name, values, winners))
     return rows
 
@@ -178,7 +182,8 @@ def compare(usernames, json_out):
                 {
                     "name": metric_name,
                     "values": {
-                        stats.login: value for stats, value in zip(stats_list, values)
+                        stats.login: value
+                        for stats, value in zip(stats_list, values, strict=True)
                     },
                     "winners": winners,
                 }
