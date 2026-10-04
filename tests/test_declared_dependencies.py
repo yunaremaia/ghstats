@@ -289,7 +289,7 @@ def test_version_falls_back_when_the_package_is_not_installed(
     observable to coverage at all.
     """
     import importlib
-    import importlib.metadata as metadata
+    from importlib import metadata
 
     def not_installed(name: str) -> str:
         raise metadata.PackageNotFoundError(name)
