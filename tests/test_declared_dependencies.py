@@ -16,6 +16,7 @@ the package's own tests, with no extra dependency installed.
 from __future__ import annotations
 
 import ast
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -247,6 +248,38 @@ def test_version_comes_from_installed_metadata() -> None:
         pytest.skip("not installed as a distribution (bare source checkout)")
         return
     assert ghstats.__version__ == expected
+
+
+def test_version_falls_back_when_the_package_is_not_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The PackageNotFoundError branch must actually work, not just exist.
+
+    An in-process reload is what makes this observable to coverage: a
+    subprocess would reach the branch but its statements would be invisible
+    to the coverage gate, which is exactly how an untested line stays
+    untested while a test appears to cover it.
+    """
+    import importlib
+
+    import importlib.metadata as metadata
+
+    def boom(name: str) -> str:
+        raise metadata.PackageNotFoundError(name)
+
+    monkeypatch.setattr(metadata, "version", boom)
+    monkeypatch.delitem(sys.modules, MODULE_NAME, raising=False)
+    reloaded = importlib.import_module(MODULE_NAME)
+    try:
+        assert reloaded.__version__ == "0.0.0.dev0", (
+            "expected the documented 0.0.0.dev0 fallback, got "
+            f"{reloaded.__version__!r}"
+        )
+    finally:
+        # Restore the real module so the rest of the session is unaffected.
+        monkeypatch.undo()
+        monkeypatch.delitem(sys.modules, MODULE_NAME, raising=False)
+        importlib.import_module(MODULE_NAME)
 
 
 def test_cli_version_agrees_with_the_module() -> None:
