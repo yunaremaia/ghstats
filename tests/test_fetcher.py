@@ -1,13 +1,29 @@
 """Tests for ghstats fetcher."""
+import json
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from ghstats.fetcher import (
     ContributionDay,
+    GHRuntimeError,
     StatsFetcher,
     UserStats,
 )
+
+
+def _return_stdout(mock_run):
+    """gh succeeds but prints undecodable output; json.loads raises inside _run_gh."""
+    mock_run.return_value = MagicMock(returncode=0, stdout="{oops", stderr="")
+
+
+def _raise_timeout(mock_run):
+    mock_run.side_effect = subprocess.TimeoutExpired(cmd=["gh", "api"], timeout=30)
+
+
+def _raise_missing_binary(mock_run):
+    mock_run.side_effect = FileNotFoundError(2, "No such file or directory", "gh")
 
 
 class TestContributionDay:
@@ -58,3 +74,39 @@ class TestStatsFetcher:
         )
         stats = fetcher.fetch_repo_stats("owner/repo")
         assert isinstance(stats, dict)
+
+    @pytest.mark.parametrize(
+        "configure,cause_type,cause_check",
+        [
+            # The decode position is the whole point of chaining this arm: the
+            # GHRuntimeError message embeds it, but only the cause keeps it typed.
+            (_return_stdout, json.JSONDecodeError,
+             lambda e: e.pos == 1 and "line 1 column" in str(e)),
+            (_raise_timeout, subprocess.TimeoutExpired,
+             lambda e: e.timeout == 30),
+            (_raise_missing_binary, FileNotFoundError,
+             lambda e: e.filename == "gh"),
+        ],
+        ids=["invalid-json", "timeout", "gh-missing"],
+    )
+    @patch("ghstats.fetcher.subprocess.run")
+    def test_run_gh_chains_the_original_cause(self, mock_run, fetcher, configure,
+                                             cause_type, cause_check):
+        """Each GHRuntimeError must keep the exception that caused it as __cause__.
+
+        The messages are deliberately uninformative ("gh command timed out after
+        30s", a fixed install hint), so the diagnostics that actually identify the
+        failure -- the JSON decode position, TimeoutExpired.cmd/.timeout,
+        FileNotFoundError.filename -- survive only on the chained cause. Without
+        `raise ... from` those attributes are lost and the traceback degrades to
+        "During handling of the above exception, another exception occurred".
+        """
+        configure(mock_run)
+
+        with pytest.raises(GHRuntimeError) as excinfo:
+            fetcher._run_gh(["user"])
+
+        assert type(excinfo.value.__cause__) is cause_type, (
+            f"__cause__ is {excinfo.value.__cause__!r}, expected {cause_type.__name__}"
+        )
+        assert cause_check(excinfo.value.__cause__)
