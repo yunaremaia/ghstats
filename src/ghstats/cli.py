@@ -232,9 +232,6 @@ def repos(username, limit, json_out):
         console.print(f"[yellow]No repos found for {username}.[/yellow]")
         return
 
-    # Sort by stars
-    repos.sort(key=lambda x: x.get("stars", 0), reverse=True)
-
     if json_out:
         click.echo(json.dumps(repos, indent=2, default=str))
         return

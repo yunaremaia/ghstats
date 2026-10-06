@@ -265,6 +265,7 @@ class StatsFetcher:
             if len(data) < per_page:
                 break
             page += 1
+        repos.sort(key=lambda r: r["stars"], reverse=True)
         return repos[:limit]
 
     def fetch_contribution_history(self, days: int = 30) -> list[dict]:
