@@ -108,8 +108,23 @@ REQUIREMENT = re.compile(
 )
 
 
-def _read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
+def _read(path: Path) -> str | None:
+    """Return *path* as text, or None when it is not a decodable text file.
+
+    A surface can be a real file that is not UTF-8 (a UTF-16 `SECURITY.md`
+    written by an editor on Windows is the common case). That is a fact about
+    the file, not an install instruction, so it is skipped -- and skipped
+    *loudly* through the guard below, never silently.
+    """
+    data = path.read_bytes()
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        # A UTF-16 BOM: still text, just not UTF-8. Decode it so its install
+        # lines are actually inspected instead of being waved through.
+        return data.decode("utf-16")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
 
 
 def _requirement_name(token: str) -> str | None:
@@ -158,7 +173,9 @@ class TestDocsInstallFromGitWhileUnpublished:
     """The expected install line is asserted first, so a failure names the fix."""
 
     def test_readme_carries_the_expected_install_line(self):
-        assert EXPECTED_INSTALL in _read(README), f"README must carry `{EXPECTED_INSTALL}`"
+        text = _read(README)
+        assert text is not None, "README.md must be a decodable text file"
+        assert EXPECTED_INSTALL in text, f"README must carry `{EXPECTED_INSTALL}`"
 
 
 class TestNoBarePyPIInstallAnywhere:
@@ -173,19 +190,31 @@ class TestNoBarePyPIInstallAnywhere:
         )
 
     def test_no_surface_installs_a_forbidden_bare_name(self):
-        offenders = {
-            name: lines[:5] for name, path in doc_surfaces() if (lines := bare_install_lines(_read(path)))
-        }
-        offenders = {name: lines for name, lines in offenders.items() if lines}
+        offenders = {}
+        undecodable = []
+        for name, path in doc_surfaces():
+            text = _read(path)
+            if text is None:
+                undecodable.append(name)
+                continue
+            lines = bare_install_lines(text)
+            if lines:
+                offenders[name] = lines[:5]
         assert not offenders, (
             f"these files tell readers to `pip install` {sorted(FORBIDDEN_TARGETS)}, which on "
             f"PyPI is not this project. Use `{EXPECTED_INSTALL}`. "
             f"Offending files and lines: {offenders}"
         )
+        assert not undecodable, (
+            f"these surfaces are not decodable text, so the guard cannot read them: {undecodable}. "
+            f"Re-save them as UTF-8."
+        )
 
     def test_no_pypi_badge_while_unpublished(self):
         """A PyPI badge renders "not found" for a package that is not on PyPI."""
-        badges = [line for line in _read(README).splitlines() if "img.shields.io/pypi" in line]
+        text = _read(README)
+        assert text is not None, "README.md must be a decodable text file"
+        badges = [line for line in text.splitlines() if "img.shields.io/pypi" in line]
         assert not badges, f"PyPI badge would render broken: {badges}"
 
 
