@@ -1,6 +1,8 @@
 """CLI for ghstats — GitHub Stats Dashboard."""
 from __future__ import annotations
 
+import csv as py_csv
+import io
 import json
 from datetime import datetime
 
@@ -373,3 +375,163 @@ def repo(repo):
 
     if stats.get("description"):
         console.print(f"\n[dim]{stats['description']}[/dim]")
+
+
+def _write_output(content: str, output: str | None) -> None:
+    """Write text content to file or stdout."""
+    if output:
+        with open(output, "w", encoding="utf-8") as f:
+            f.write(content)
+    else:
+        click.echo(content, nl=False if content.endswith("\n") else True)
+
+
+@cli.command()
+@click.argument("usernames", nargs=-1, required=True)
+@click.option("--output", "-o", type=click.Path(dir_okay=False, writable=True), default=None, help="Output file path (default: stdout)")
+def csv(usernames: tuple[str, ...], output: str | None):
+    """Export user stats or user comparison as CSV."""
+    if len(usernames) == 1:
+        username = usernames[0]
+        fetcher = StatsFetcher(username)
+        stats = fetcher.fetch_user_stats()
+        out = io.StringIO()
+        writer = py_csv.writer(out, lineterminator="\n")
+        writer.writerow(["metric", "value"])
+        writer.writerow(["username", stats.login or username])
+        writer.writerow(["followers", getattr(stats, "followers", 0) or 0])
+        writer.writerow(["following", getattr(stats, "following", 0) or 0])
+        writer.writerow(["public_repos", getattr(stats, "public_repos", 0) or 0])
+        total_contribs = 0
+        if getattr(stats, "contributions", None):
+            total_contribs = getattr(stats.contributions, "total_contributions", 0) or 0
+        writer.writerow(["total_contributions", total_contribs])
+        prs_opened = 0
+        prs_merged = 0
+        if getattr(stats, "pull_requests", None):
+            prs_opened = getattr(stats.pull_requests, "total_opened", 0) or 0
+            prs_merged = getattr(stats.pull_requests, "total_merged", 0) or 0
+        writer.writerow(["prs_opened", prs_opened])
+        writer.writerow(["prs_merged", prs_merged])
+        issues_opened = 0
+        if getattr(stats, "issues", None):
+            issues_opened = getattr(stats.issues, "total_opened", 0) or 0
+        writer.writerow(["issues_opened", issues_opened])
+        _write_output(out.getvalue(), output)
+        return
+
+    stats_list = [StatsFetcher(u).fetch_user_stats() for u in usernames]
+    rows = _comparison_rows(stats_list)
+    out = io.StringIO()
+    writer = py_csv.writer(out, lineterminator="\n")
+    header = ["metric"] + [f"{s.login}" for s in stats_list]
+    writer.writerow(header)
+    for metric_name, values, _ in rows:
+        metric_key = metric_name.lower().replace(" ", "_")
+        writer.writerow([metric_key] + [str(v) for v in values])
+    _write_output(out.getvalue(), output)
+
+
+class MarkdownGroup(click.Group):
+    """Click group that defaults to 'report' subcommand if none specified."""
+
+    def resolve_command(self, ctx: click.Context, args: list[str]):
+        cmd_name = args[0] if args else None
+        if cmd_name in self.commands:
+            return super().resolve_command(ctx, args)
+        if cmd_name and not cmd_name.startswith("-"):
+            cmd = self.commands["report"]
+            return "report", cmd, args
+        return super().resolve_command(ctx, args)
+
+
+@cli.group(cls=MarkdownGroup)
+def markdown():
+    """Export stats or reports as Markdown."""
+
+
+@markdown.command("report", hidden=True)
+@click.argument("username")
+@click.option("--output", "-o", type=click.Path(dir_okay=False, writable=True), default=None, help="Output file path (default: stdout)")
+def markdown_report(username: str, output: str | None):
+    """Render user stats as Markdown report."""
+    fetcher = StatsFetcher(username)
+    stats = fetcher.fetch_user_stats()
+    repos_list = fetcher.fetch_user_repos(limit=10)
+
+    total_contribs = 0
+    if getattr(stats, "contributions", None):
+        total_contribs = getattr(stats.contributions, "total_contributions", 0) or 0
+    prs_opened = 0
+    prs_merged = 0
+    if getattr(stats, "pull_requests", None):
+        prs_opened = getattr(stats.pull_requests, "total_opened", 0) or 0
+        prs_merged = getattr(stats.pull_requests, "total_merged", 0) or 0
+    issues_opened = 0
+    if getattr(stats, "issues", None):
+        issues_opened = getattr(stats.issues, "total_opened", 0) or 0
+
+    lines = [
+        f"# GitHub Stats: {stats.login or username}",
+        "",
+        "| Metric | Value |",
+        "|--------|-------|",
+        f"| Followers | {getattr(stats, 'followers', 0) or 0} |",
+        f"| Following | {getattr(stats, 'following', 0) or 0} |",
+        f"| Public Repos | {getattr(stats, 'public_repos', 0) or 0} |",
+        f"| Total Contributions | {total_contribs} |",
+        f"| PRs Opened | {prs_opened} |",
+        f"| PRs Merged | {prs_merged} |",
+        f"| Issues Opened | {issues_opened} |",
+        "",
+    ]
+
+    if repos_list:
+        lines.extend([
+            "## Top Repos",
+            "",
+            "| Repo | Stars | Forks | Language |",
+            "|------|-------|-------|----------|",
+        ])
+        for r in repos_list:
+            r_name = r.get("name", "—")
+            r_stars = r.get("stars", 0)
+            r_forks = r.get("forks", 0)
+            r_lang = r.get("language") or "—"
+            lines.append(f"| {r_name} | {r_stars} | {r_forks} | {r_lang} |")
+        lines.append("")
+
+    _write_output("\n".join(lines).strip() + "\n", output)
+
+
+@markdown.command("activity")
+@click.argument("username")
+@click.option("--days", "-d", default=30, help="Days of history (default: 30)")
+@click.option("--output", "-o", type=click.Path(dir_okay=False, writable=True), default=None, help="Output file path (default: stdout)")
+def markdown_activity(username: str, days: int, output: str | None):
+    """Export recent activity feed as a Markdown table."""
+    fetcher = StatsFetcher(username)
+    activities = fetcher.fetch_contribution_history(days=days)
+
+    lines = [
+        f"# Recent Activity: @{username} (last {days} days)",
+        "",
+        "| Type | Title | Repo | Status | Date |",
+        "|------|-------|------|--------|------|",
+    ]
+
+    if not activities:
+        lines.append("| — | No recent activity found | — | — | — |")
+    else:
+        for act in activities:
+            type_str = "PR" if act.get("type") == "pr" else "Issue"
+            title = (act.get("title") or "—").replace("|", "\\|")
+            repo = act.get("repo") or "—"
+            status = act.get("state") or "—"
+            date = _format_date(act.get("date", ""))
+            lines.append(f"| {type_str} | {title} | {repo} | {status} | {date} |")
+    lines.append("")
+
+    _write_output("\n".join(lines).strip() + "\n", output)
+
+

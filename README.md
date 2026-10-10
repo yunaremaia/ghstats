@@ -63,6 +63,18 @@ ghstats badge yunaremaia
 
 # JSON output
 ghstats stats yunaremaia --json-output
+
+# Export user stats as CSV
+ghstats csv yunaremaia --output stats.csv
+
+# Export comparison as CSV
+ghstats csv yunaremaia octocat --output comparison.csv
+
+# Export Markdown report
+ghstats markdown yunaremaia --output report.md
+
+# Export recent activity feed as Markdown table
+ghstats markdown activity yunaremaia --days 30 --output activity.md
 ```
 
 ## Example Output

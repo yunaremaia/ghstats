@@ -172,3 +172,96 @@ def test_compare_json_fails_loudly_when_value_lengths_diverge(monkeypatch):
         "zip() truncated a 2-user comparison to 1 value and the command still "
         f"exited 0: {result.output!r}"
     )
+
+
+def test_csv_user_export(monkeypatch, tmp_path):
+    users = {
+        "alice": _user("alice", followers=12, contributions=30),
+    }
+    monkeypatch.setattr(
+        "ghstats.cli.StatsFetcher.fetch_user_stats",
+        lambda fetcher: users[fetcher.username],
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["csv", "alice"])
+    assert result.exit_code == 0
+    assert "metric,value" in result.output
+    assert "username,alice" in result.output
+    assert "followers,12" in result.output
+    assert "total_contributions,30" in result.output
+
+    # File output test
+    out_file = tmp_path / "alice.csv"
+    file_result = runner.invoke(cli, ["csv", "alice", "--output", str(out_file)])
+    assert file_result.exit_code == 0
+    assert out_file.exists()
+    assert "username,alice" in out_file.read_text(encoding="utf-8")
+
+
+def test_csv_compare_export(monkeypatch):
+    users = {
+        "alice": _user("alice", followers=12, contributions=30),
+        "bob": _user("bob", followers=8, contributions=20),
+    }
+    monkeypatch.setattr(
+        "ghstats.cli.StatsFetcher.fetch_user_stats",
+        lambda fetcher: users[fetcher.username],
+    )
+
+    result = CliRunner().invoke(cli, ["csv", "alice", "bob"])
+    assert result.exit_code == 0
+    lines = [line.strip() for line in result.output.strip().split("\n")]
+    assert lines[0] == "metric,alice,bob"
+    assert "followers,12,8" in lines
+    assert "contributions,30,20" in lines
+
+
+def test_markdown_report_export(monkeypatch, tmp_path):
+    users = {
+        "alice": _user("alice", followers=12, contributions=30),
+    }
+    repos = [
+        {"name": "repo1", "stars": 5, "forks": 2, "language": "Python", "description": "test repo"},
+    ]
+    monkeypatch.setattr(
+        "ghstats.cli.StatsFetcher.fetch_user_stats",
+        lambda fetcher: users[fetcher.username],
+    )
+    monkeypatch.setattr(
+        "ghstats.cli.StatsFetcher.fetch_user_repos",
+        lambda fetcher, limit=10: repos,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["markdown", "alice"])
+    assert result.exit_code == 0
+    assert "# GitHub Stats: alice" in result.output
+    assert "| Followers | 12 |" in result.output
+    assert "## Top Repos" in result.output
+    assert "| repo1 | 5 | 2 | Python |" in result.output
+
+    # File output test
+    out_file = tmp_path / "report.md"
+    file_result = runner.invoke(cli, ["markdown", "alice", "-o", str(out_file)])
+    assert file_result.exit_code == 0
+    assert out_file.exists()
+    assert "# GitHub Stats: alice" in out_file.read_text(encoding="utf-8")
+
+
+def test_markdown_activity_export(monkeypatch):
+    activities = [
+        {"type": "pr", "title": "Add feature", "repo": "owner/repo", "state": "merged", "date": "2026-10-01T12:00:00Z"},
+        {"type": "issue", "title": "Fix bug", "repo": "owner/repo", "state": "open", "date": "2026-10-02T12:00:00Z"},
+    ]
+    monkeypatch.setattr(
+        "ghstats.cli.StatsFetcher.fetch_contribution_history",
+        lambda fetcher, days=30: activities,
+    )
+
+    result = CliRunner().invoke(cli, ["markdown", "activity", "alice", "--days", "14"])
+    assert result.exit_code == 0
+    assert "# Recent Activity: @alice (last 14 days)" in result.output
+    assert "| PR | Add feature | owner/repo | merged | 2026-10-01 |" in result.output
+    assert "| Issue | Fix bug | owner/repo | open | 2026-10-02 |" in result.output
+
