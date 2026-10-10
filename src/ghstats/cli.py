@@ -85,7 +85,7 @@ def _format_date(date_str: str) -> str:
 
 
 @click.group()
-@click.version_option(version=__version__, prog_name="ghstats")
+@click.version_option(__version__, "-v", "--version", prog_name="ghstats")
 def cli():
     """ghstats — GitHub Stats Dashboard."""
 

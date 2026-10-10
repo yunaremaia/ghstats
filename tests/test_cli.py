@@ -172,3 +172,18 @@ def test_compare_json_fails_loudly_when_value_lengths_diverge(monkeypatch):
         "zip() truncated a 2-user comparison to 1 value and the command still "
         f"exited 0: {result.output!r}"
     )
+
+
+def test_version_flag_and_alias():
+    """Verify that both --version and -v print the version and exit 0."""
+    from ghstats import __version__
+    runner = CliRunner()
+
+    res_long = runner.invoke(cli, ["--version"])
+    assert res_long.exit_code == 0
+    assert __version__ in res_long.output
+
+    res_short = runner.invoke(cli, ["-v"])
+    assert res_short.exit_code == 0
+    assert __version__ in res_short.output
+
