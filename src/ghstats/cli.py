@@ -14,6 +14,7 @@ from ghstats import __version__
 from ghstats.fetcher import StatsFetcher, UserStats
 
 console = Console()
+progress_console = Console(stderr=True)
 
 
 def _comparison_metrics(stats: UserStats) -> dict[str, int]:
@@ -100,7 +101,8 @@ def stats(username, json_out):
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
-        console=console,
+        console=progress_console,
+        disable=json_out,
     ) as progress:
         task = progress.add_task(f"Fetching stats for {username}...", total=None)
         user_stats = fetcher.fetch_user_stats()
@@ -167,7 +169,8 @@ def compare(usernames, json_out):
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
-        console=console,
+        console=progress_console,
+        disable=json_out,
     ) as progress:
         task = progress.add_task("Fetching comparison stats...", total=len(usernames))
         for username in usernames:
@@ -222,7 +225,8 @@ def repos(username, limit, json_out):
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
-        console=console,
+        console=progress_console,
+        disable=json_out,
     ) as progress:
         task = progress.add_task(f"Fetching repos for {username}...", total=None)
         repos = fetcher.fetch_user_repos(limit=limit)
@@ -271,7 +275,8 @@ def activity(username, days, json_out):
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
-        console=console,
+        console=progress_console,
+        disable=json_out,
     ) as progress:
         task = progress.add_task(f"Fetching activity for {username}...", total=None)
         activities = fetcher.fetch_contribution_history(days=days)
@@ -352,7 +357,7 @@ def repo(repo):
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
-        console=console,
+        console=progress_console,
     ) as progress:
         task = progress.add_task(f"Fetching stats for {repo}...", total=None)
         stats = fetcher.fetch_repo_stats(repo)

@@ -41,6 +41,7 @@ def test_compare_renders_winners(monkeypatch):
 
 
 def test_compare_json_output(monkeypatch):
+    import json
     users = {
         "alice": _user("alice", followers=12, contributions=30),
         "bob": _user("bob", followers=8, contributions=20),
@@ -53,9 +54,52 @@ def test_compare_json_output(monkeypatch):
     result = CliRunner().invoke(cli, ["compare", "alice", "bob", "--json-output"])
 
     assert result.exit_code == 0
-    assert '"users": [' in result.output
-    assert '"name": "Followers"' in result.output
-    assert '"winners": [\n        "alice"' in result.output
+    parsed = json.loads(result.output)
+    assert parsed["users"] == ["alice", "bob"]
+    assert any(m["name"] == "Followers" for m in parsed["metrics"])
+
+
+def test_stats_json_output_is_parseable(monkeypatch):
+    import json
+    user = _user("alice", followers=10, contributions=25)
+    monkeypatch.setattr(
+        "ghstats.cli.StatsFetcher.fetch_user_stats",
+        lambda self: user,
+    )
+    result = CliRunner().invoke(cli, ["stats", "alice", "--json-output"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data["login"] == "alice"
+    assert data["followers"] == 10
+
+
+def test_repos_json_output_is_parseable(monkeypatch):
+    import json
+    repos = [{"name": "repo1", "stars": 5, "forks": 0}]
+    monkeypatch.setattr(
+        "ghstats.cli.StatsFetcher.fetch_user_repos",
+        lambda self, limit: repos,
+    )
+    result = CliRunner().invoke(cli, ["repos", "alice", "--json-output"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert isinstance(data, list)
+    assert data[0]["name"] == "repo1"
+
+
+def test_activity_json_output_is_parseable(monkeypatch):
+    import json
+    acts = [{"type": "pr", "title": "feat", "repo": "r", "state": "open"}]
+    monkeypatch.setattr(
+        "ghstats.cli.StatsFetcher.fetch_contribution_history",
+        lambda self, days: acts,
+    )
+    result = CliRunner().invoke(cli, ["activity", "alice", "--json-output"])
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert isinstance(data, list)
+    assert data[0]["title"] == "feat"
+
 
 
 def test_compare_requires_two_users():
