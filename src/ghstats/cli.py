@@ -383,7 +383,7 @@ def _write_output(content: str, output: str | None) -> None:
         with open(output, "w", encoding="utf-8") as f:
             f.write(content)
     else:
-        click.echo(content, nl=False if content.endswith("\n") else True)
+        click.echo(content, nl=not content.endswith("\n"))
 
 
 @cli.command()
