@@ -235,3 +235,34 @@ class TestRepoArgv:
         assert not any(arg.startswith("--per-page") for arg in cmd), cmd
         assert not any(arg.startswith("--paginate") for arg in cmd), cmd
         assert repos[0]["full_name"] == "yunaremaia/ghstats"
+
+    def test_repo_listing_pagination_stable_per_page(self, fetcher, monkeypatch):
+        """Paging must maintain a constant per_page so offsets advance monotonically (issue #81)."""
+        calls = []
+
+        def fake_run(cmd, **kwargs):
+            calls.append(list(cmd))
+            endpoint = cmd[2]
+            if "page=1" in endpoint:
+                # Page 1 returns 2 repos (1 fork, 1 non-fork)
+                page_data = [
+                    {"name": "fork1", "full_name": "yunaremaia/fork1", "fork": True, "stargazers_count": 0},
+                    {"name": "repo1", "full_name": "yunaremaia/repo1", "fork": False, "stargazers_count": 5},
+                ]
+            else:
+                # Page 2 returns 2 repos (both non-forks)
+                page_data = [
+                    {"name": "repo2", "full_name": "yunaremaia/repo2", "fork": False, "stargazers_count": 10},
+                    {"name": "repo3", "full_name": "yunaremaia/repo3", "fork": False, "stargazers_count": 2},
+                ]
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(page_data), stderr="")
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        repos = fetcher.fetch_user_repos(limit=2)
+
+        assert len(calls) == 2
+        # Both pages must request per_page=2 without shrinking to per_page=1 on page 2
+        assert "per_page=2&page=1" in calls[0][2]
+        assert "per_page=2&page=2" in calls[1][2]
+        assert len(repos) == 2
+        assert [r["name"] for r in repos] == ["repo2", "repo1"]

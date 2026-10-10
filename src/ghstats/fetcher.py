@@ -238,12 +238,12 @@ class StatsFetcher:
         """Fetch user's public repos."""
         repos: list[dict] = []
         page = 1
+        per_page = min(_MAX_PER_PAGE, limit)
         # A user can own many more repos than `limit` while only a few are
         # non-forks, so bound the number of pages instead of trusting the
         # exit condition to stop an unbounded walk.
         max_pages = max(1, -(-limit // _MAX_PER_PAGE) + _MAX_REPO_PAGES)
         while len(repos) < limit and page <= max_pages:
-            per_page = min(_MAX_PER_PAGE, limit - len(repos))
             # `gh api` rejects --per-page/--paginate; paging params belong in
             # the endpoint query string.
             data = self._run_gh([
